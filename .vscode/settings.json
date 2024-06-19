@@ -1,6 +1,10 @@
 {
     "files.associations": {
         "type_traits": "c",
-        "iostream": "c"
+        "iostream": "c",
+        "vector": "cpp",
+        "ostream": "cpp",
+        "xtree": "cpp",
+        "list": "cpp"
     }
 }
