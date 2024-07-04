@@ -5,6 +5,11 @@
         "vector": "cpp",
         "ostream": "cpp",
         "xtree": "cpp",
-        "list": "cpp"
-    }
+        "list": "cpp",
+        "forward_list": "cpp",
+        "deque": "cpp",
+        "xstring": "cpp",
+        "xutility": "cpp"
+    },
+
 }
