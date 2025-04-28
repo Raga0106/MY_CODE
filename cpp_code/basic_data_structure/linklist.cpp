@@ -61,7 +61,7 @@ int main()
     for(int i=0;i<10;i++){
         one.insert(i);
     }
-    one.removevalue(9);
+    one.removevalue(6);
     one.print();
 
     return 0;
