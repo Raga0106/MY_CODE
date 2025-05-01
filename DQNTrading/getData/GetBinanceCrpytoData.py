@@ -51,11 +51,15 @@ def get_historical_klines(symbol, interval, start_str, end_str, filename):
 # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX # EX #  
 
 # 取得 BTC/USDT 2020-2024 日 K 線數據，並儲存為 CSV
-get_historical_klines("BTCUSDT", "1d", "2020-01-01", "2024-01-01", "btc_1d_2020_2024.csv")
+get_historical_klines("BTCUSDT", "1h", "2020-01-01", "2024-01-01", "btc_1h_2020_2024.csv")
+get_historical_klines("BTCUSDT", "1h", "2024-01-01", "2025-01-01", "btc_1h_2024_2025.csv")
+
 
 # 取得 ETH/USDT 2020-2024 日 K 線數據，並儲存為 CSV
-get_historical_klines("ETHUSDT", "1d", "2020-01-01", "2024-01-01", "eth_1d_2020_2024.csv")
+get_historical_klines("ETHUSDT", "1h", "2020-01-01", "2024-01-01", "eth_1h_2020_2024.csv")
+get_historical_klines("ETHUSDT", "1h", "2024-01-01", "2025-01-01", "eth_1h_2024_2025.csv")
 
 # 取得 SOL/USDT 2020-2024 4小時 K 線數據，並儲存為 CSV
-get_historical_klines("SOLUSDT", "4h", "2020-01-01", "2024-01-01", "sol_4h_2020_2024.csv")
+get_historical_klines("SOLUSDT", "1h", "2020-01-01", "2024-01-01", "sol_1h_2020_2024.csv")
+get_historical_klines("SOLUSDT", "1h", "2024-01-01", "2025-01-01", "sol_1h_2024_2025.csv")
 

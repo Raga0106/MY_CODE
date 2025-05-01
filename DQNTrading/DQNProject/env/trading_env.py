@@ -25,10 +25,7 @@ class TradingEnv:
         self.total_risk_pct = 0.05          # 總風險暴露（例如：所有持倉的潛在虧損總和不超過總資產的 5%）
 
         # === 持有時間處罰設定 ===
-        # self.holding_penalty_rate = 0.0001 # 每步持有懲罰因子 (舊)
-        self.holding_penalty_rate_profit = 0.00005 # 持有獲利部位的懲罰因子
-        self.holding_penalty_rate_loss = 0.0002  # 持有虧損部位的懲罰因子
-        self.no_position_penalty_rate = 0.0001 # 無倉位時的懲罰因子 (懲罰閒置資金)
+        self.holding_penalty_rate = 0.0001 # 每步持有懲罰因子
 
         # === 績效停單設定 (Kill Switch) ===
         self.kill_switch_enabled = True
@@ -131,24 +128,30 @@ class TradingEnv:
             except Exception:
                 pass # Timestamp 格式錯誤或其他問題
 
+# ... (inside step method) ...
+
         # === 檢查停損 ===
+        stop_loss_pnl = 0
+        if self.position == 1 and self.stop_loss_price is not None and current_low <= self.stop_loss_price:
+            trigger_price = self.stop_loss_price  # <--- 儲存觸發價格
+            stop_loss_pnl = self._close_position(trigger_price) # 使用儲存的價格平倉
+            info['trade_executed'] = True
+            info['reason'] = f'Long Stop Loss triggered at {trigger_price:.4f}' # <--- 使用儲存的價格格式化
+            self._update_performance_tracker(stop_loss_pnl)
+            realized_pnl_this_step = stop_loss_pnl
+        elif self.position == -1 and self.stop_loss_price is not None and current_high >= self.stop_loss_price:
+            trigger_price = self.stop_loss_price  # <--- 儲存觸發價格
+            stop_loss_pnl = self._close_position(trigger_price) # 使用儲存的價格平倉
+            info['trade_executed'] = True
+            info['reason'] = f'Short Stop Loss triggered at {trigger_price:.4f}' # <--- 使用儲存的價格格式化
+            self._update_performance_tracker(stop_loss_pnl)
+            realized_pnl_this_step = stop_loss_pnl
+        # 移除之前為了解決 None 而添加的 elif 條件，因為現在的邏輯更清晰
+        # elif self.position == -1 and self.stop_loss_price is None and current_high >= current_price:
+        #     # ... (這段邏輯可能不再需要，或者需要根據你的意圖重新評估) ...
+        #     pass
 
-            stop_loss_pnl = 0
-            if self.position == 1 and self.stop_loss_price is not None and current_low <= self.stop_loss_price:
-                trigger_price = self.stop_loss_price  # <--- 儲存觸發價格
-                stop_loss_pnl = self._close_position(trigger_price) # 使用儲存的價格平倉
-                info['trade_executed'] = True
-                info['reason'] = f'Long Stop Loss triggered at {trigger_price:.4f}' # <--- 使用儲存的價格格式化
-                self._update_performance_tracker(stop_loss_pnl)
-                realized_pnl_this_step = stop_loss_pnl
-            elif self.position == -1 and self.stop_loss_price is not None and current_high >= self.stop_loss_price:
-                trigger_price = self.stop_loss_price  # <--- 儲存觸發價格
-                stop_loss_pnl = self._close_position(trigger_price) # 使用儲存的價格平倉
-                info['trade_executed'] = True
-                info['reason'] = f'Short Stop Loss triggered at {trigger_price:.4f}' # <--- 使用儲存的價格格式化
-                self._update_performance_tracker(stop_loss_pnl)
-                realized_pnl_this_step = stop_loss_pnl
-
+# ... (rest of the step method) ...
 
         # === 根據 action 執行交易 (如果未被停損觸發) ===
         action_pnl = None
@@ -219,67 +222,31 @@ class TradingEnv:
         elif self.position == 0:
             if action == 1: # 開多倉
                 if self._can_open_new_position():
-                    # 計算止損價格
+                    # risk_per_unit = current_price * self.single_trade_risk_pct
                     self.stop_loss_price = current_price * (1 - self.single_trade_risk_pct)
-                    risk_per_unit = current_price - self.stop_loss_price
-                    if risk_per_unit <= 0: # 避免除以零或負數
-                        return None # 無法計算倉位大小
-
-                    # 計算基於風險的倉位大小
-                    max_loss_amount = self.total_asset * self.single_trade_risk_pct
-                    position_size = max_loss_amount / risk_per_unit
-
-                    # 計算實際成本並檢查現金是否足夠
-                    cost = position_size * current_price * (1 + self.commission_rate + self.slippage_rate)
-                    if self.cash >= cost and position_size > 0:
-                        # 確保倉位大小不超過現金能買的量 (以防萬一)
-                        max_affordable_size = self.cash / (current_price * (1 + self.commission_rate + self.slippage_rate))
-                        final_position_size = min(position_size, max_affordable_size)
-
-                        if final_position_size > 0:
-                            final_cost = final_position_size * current_price * (1 + self.commission_rate + self.slippage_rate)
-                            self.cash -= final_cost
-                            self.holding = final_position_size
-                            self.position = 1
-                            self.entry_price = current_price
-                            self.holding_steps = 0
-                            # 重新計算止損價以匹配實際倉位 (可選，但更精確)
-                            # self.stop_loss_price = current_price - (max_loss_amount / final_position_size)
-                            self.trade_log.append((self.current_step, 'Open Long', current_price, final_position_size, 0))
+                    amount_to_buy = (self.cash * 0.9) / current_price # 簡易倉位大小
+                    cost = amount_to_buy * current_price * (1 + self.commission_rate + self.slippage_rate)
+                    if self.cash >= cost and amount_to_buy > 0:
+                        self.cash -= cost
+                        self.holding = amount_to_buy
+                        self.position = 1
+                        self.entry_price = current_price
+                        self.holding_steps = 0
+                        self.trade_log.append((self.current_step, 'Open Long', current_price, amount_to_buy, 0))
             elif action == 2: # 開空倉
                  if self._can_open_new_position():
-                    # 計算止損價格
+                    # risk_per_unit = current_price * self.single_trade_risk_pct
                     self.stop_loss_price = current_price * (1 + self.single_trade_risk_pct)
-                    risk_per_unit = self.stop_loss_price - current_price
-                    if risk_per_unit <= 0:
-                        return None
-
-                    # 計算基於風險的倉位大小
-                    max_loss_amount = self.total_asset * self.single_trade_risk_pct
-                    position_size = max_loss_amount / risk_per_unit
-
-                    # 計算保證金和費用
-                    margin_required = position_size * current_price # 簡化保證金計算
-                    commission_cost = position_size * current_price * (self.commission_rate + self.slippage_rate)
-                    total_cash_needed = margin_required + commission_cost # 這裡假設保證金直接從現金扣除 (不完全準確，但作為簡化)
-
-                    if self.cash >= total_cash_needed and position_size > 0:
-                        # 確保倉位大小不超過現金能支持的量
-                        # 這裡的檢查比較複雜，因為涉及保證金，暫時簡化
-                        max_affordable_size = self.cash / (current_price * (1 + self.commission_rate + self.slippage_rate)) # 粗略估計
-                        final_position_size = min(position_size, max_affordable_size)
-
-                        if final_position_size > 0:
-                            final_commission_cost = final_position_size * current_price * (self.commission_rate + self.slippage_rate)
-                            # 實際操作中，保證金是鎖定，不是直接扣除，這裡為了簡化先扣費用
-                            self.cash -= final_commission_cost
-                            self.holding = final_position_size
-                            self.position = -1
-                            self.entry_price = current_price
-                            self.holding_steps = 0
-                            # 重新計算止損價
-                            # self.stop_loss_price = current_price + (max_loss_amount / final_position_size)
-                            self.trade_log.append((self.current_step, 'Open Short', current_price, final_position_size, 0))
+                    amount_to_sell = (self.cash * 0.9) / current_price # 簡易倉位大小
+                    margin_required = amount_to_sell * current_price # 簡化保證金
+                    commission_cost = amount_to_sell * current_price * (self.commission_rate + self.slippage_rate)
+                    if self.cash >= margin_required + commission_cost and amount_to_sell > 0: # 確保現金足夠
+                        self.cash -= commission_cost # 先扣費用
+                        self.holding = amount_to_sell
+                        self.position = -1
+                        self.entry_price = current_price
+                        self.holding_steps = 0
+                        self.trade_log.append((self.current_step, 'Open Short', current_price, amount_to_sell, 0))
 
         return executed_pnl # 只有平倉時返回 PnL
 
